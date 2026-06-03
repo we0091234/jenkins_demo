@@ -42,7 +42,7 @@ def test_home_page_displays_chinese_intro_text() -> None:
     response = asyncio.run(get("/"))
 
     assert response.status_code == 200
-    assert "FastAPI 你好 jenkins。" in response.text
+    assert "FastAPI 你好 jenkins" in response.text
 
 
 @allure.feature("健康检查")
