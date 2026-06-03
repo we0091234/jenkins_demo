@@ -57,7 +57,7 @@ async def read_root() -> str:
     <body>
         <main>
             <h1>Jenkins Demo</h1>
-            <p>FastAPI 服务已经成功启动，页面部署正常。</p>
+            <p>FastAPI 你好 jenkins。</p>
             <span class="status"><span class="dot"></span>Service Online</span>
         </main>
     </body>
