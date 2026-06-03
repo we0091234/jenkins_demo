@@ -15,7 +15,7 @@ pipeline {
             steps {
                 echo 'installing dependencies with uv ...'
                 sh '''
-                    /var/jenkins_home/.local/bin/uv sync
+                    /var/jenkins_home/.local/bin/uv sync --dev
                 '''
             }
         }
@@ -29,8 +29,8 @@ pipeline {
                     /var/jenkins_home/.local/bin/uv run pytest \
                       -v \
                       --junitxml=reports/junit.xml \
-                      --html=reports/report.html \
-                      --self-contained-html
+                      --alluredir=reports/allure-results \
+                      --clean-alluredir
                 '''
             }
         }
@@ -38,7 +38,13 @@ pipeline {
 
     post {
         always {
-            junit allowEmptyResults: true, testResults: 'reports/junit.xml'
+            junit testResults: 'reports/junit.xml'
+
+            allure([
+                includeProperties: false,
+                jdk: '',
+                results: [[path: 'reports/allure-results']]
+            ])
 
             archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
         }
