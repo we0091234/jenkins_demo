@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         IMAGE_NAME = 'jenkins-demo'
-        CONTAINER_NAME = 'jenkins-demo'
+        CONTAINER_NAME = 'jenkins_demo'
         APP_PORT = '9050'
     }
 
