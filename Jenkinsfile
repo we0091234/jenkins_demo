@@ -151,14 +151,22 @@ pipeline {
                     fi
 
                     HEALTHY=false
-                    for i in $(seq 1 30); do
-                      if docker exec "${CONTAINER_NAME}" python -c \
-                        "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${APP_PORT}/health', timeout=2)"; then
+                    for i in $(seq 1 40); do
+                      RUNNING=$(docker inspect \
+                        --format='{{.State.Running}}' \
+                        "${CONTAINER_NAME}" 2>/dev/null || true)
+                      HEALTH_STATUS=$(docker inspect \
+                        --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+                        "${CONTAINER_NAME}" 2>/dev/null || true)
+
+                      echo "waiting for deployment: running=${RUNNING}, health=${HEALTH_STATUS}"
+
+                      if [ "${RUNNING}" = 'true' ] && [ "${HEALTH_STATUS}" = 'healthy' ]; then
                         HEALTHY=true
                         break
                       fi
 
-                      if ! docker inspect "${CONTAINER_NAME}" >/dev/null 2>&1; then
+                      if [ "${RUNNING}" != 'true' ] || [ "${HEALTH_STATUS}" = 'unhealthy' ]; then
                         break
                       fi
 
