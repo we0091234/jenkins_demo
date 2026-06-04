@@ -58,6 +58,7 @@ async def read_root() -> str:
         <main>
             <h1>Jenkins Demo</h1>
             <p>FastAPI 你好 jenkins,这是一个测试</p>
+            <p>今天是 2026 年 6 月 4 日 星期四</p>
             <span class="status"><span class="dot"></span>Service Online</span>
         </main>
     </body>
