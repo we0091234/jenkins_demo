@@ -202,26 +202,14 @@ pipeline {
                 sh '''
                     set -eu
 
-                    KEEP_IDS=$(mktemp)
-                    docker image inspect \
-                      "${IMAGE_NAME}:${BUILD_NUMBER}" \
-                      "${IMAGE_NAME}:latest" \
-                      "${IMAGE_NAME}:previous" \
-                      --format '{{.Id}}' 2>/dev/null \
-                      | sort -u > "${KEEP_IDS}"
-
                     docker images "${IMAGE_NAME}" \
-                      --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
-                      | while read -r IMAGE_REF IMAGE_ID; do
-                          FULL_ID=$(docker image inspect "${IMAGE_REF}" --format '{{.Id}}' 2>/dev/null || true)
-                          if echo "${IMAGE_REF}" | grep -Eq "^${IMAGE_NAME}:([0-9]+|latest|previous)$" \
-                            && [ -n "${FULL_ID}" ] \
-                            && ! grep -qx "${FULL_ID}" "${KEEP_IDS}"; then
+                      --format '{{.Repository}}:{{.Tag}}' \
+                      | while read -r IMAGE_REF; do
+                          if echo "${IMAGE_REF}" | grep -Eq "^${IMAGE_NAME}:[0-9]+$" \
+                            && [ "${IMAGE_REF}" != "${IMAGE_NAME}:${BUILD_NUMBER}" ]; then
                             docker rmi "${IMAGE_REF}" || true
                           fi
                         done
-
-                    rm -f "${KEEP_IDS}"
                 '''
             }
         }
