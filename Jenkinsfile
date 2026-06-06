@@ -123,6 +123,10 @@ pipeline {
                       --format='{{.Image}}' \
                       "${CONTAINER_NAME}" 2>/dev/null || true)
 
+                    if [ -n "${OLD_IMAGE}" ]; then
+                      docker tag "${OLD_IMAGE}" "${IMAGE_NAME}:previous"
+                    fi
+
                     rollback() {
                       echo 'deployment failed, restoring previous container ...'
                       docker logs "${CONTAINER_NAME}" 2>/dev/null || true
@@ -180,6 +184,44 @@ pipeline {
 
                     docker tag "${NEW_IMAGE}" "${IMAGE_NAME}:latest"
                     echo "deployed ${NEW_IMAGE} on port ${APP_PORT}"
+                '''
+            }
+        }
+
+        stage('Cleanup images') {
+            when {
+                anyOf {
+                    branch 'main'
+                    expression {
+                        env.GIT_BRANCH == 'main' || env.GIT_BRANCH == 'origin/main'
+                    }
+                }
+            }
+            steps {
+                echo 'cleaning up old application images ...'
+                sh '''
+                    set -eu
+
+                    KEEP_IDS=$(mktemp)
+                    docker image inspect \
+                      "${IMAGE_NAME}:${BUILD_NUMBER}" \
+                      "${IMAGE_NAME}:latest" \
+                      "${IMAGE_NAME}:previous" \
+                      --format '{{.Id}}' 2>/dev/null \
+                      | sort -u > "${KEEP_IDS}"
+
+                    docker images "${IMAGE_NAME}" \
+                      --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
+                      | while read -r IMAGE_REF IMAGE_ID; do
+                          FULL_ID=$(docker image inspect "${IMAGE_REF}" --format '{{.Id}}' 2>/dev/null || true)
+                          if echo "${IMAGE_REF}" | grep -Eq "^${IMAGE_NAME}:([0-9]+|latest|previous)$" \
+                            && [ -n "${FULL_ID}" ] \
+                            && ! grep -qx "${FULL_ID}" "${KEEP_IDS}"; then
+                            docker rmi "${IMAGE_REF}" || true
+                          fi
+                        done
+
+                    rm -f "${KEEP_IDS}"
                 '''
             }
         }
