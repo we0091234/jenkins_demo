@@ -183,6 +183,7 @@ pipeline {
                     fi
 
                     docker tag "${NEW_IMAGE}" "${IMAGE_NAME}:latest"
+                    docker rmi "${NEW_IMAGE}" || true
                     echo "deployed ${NEW_IMAGE} on port ${APP_PORT}"
                 '''
             }
@@ -205,8 +206,7 @@ pipeline {
                     docker images "${IMAGE_NAME}" \
                       --format '{{.Repository}}:{{.Tag}}' \
                       | while read -r IMAGE_REF; do
-                          if echo "${IMAGE_REF}" | grep -Eq "^${IMAGE_NAME}:[0-9]+$" \
-                            && [ "${IMAGE_REF}" != "${IMAGE_NAME}:${BUILD_NUMBER}" ]; then
+                          if echo "${IMAGE_REF}" | grep -Eq "^${IMAGE_NAME}:[0-9]+$"; then
                             docker rmi "${IMAGE_REF}" || true
                           fi
                         done
