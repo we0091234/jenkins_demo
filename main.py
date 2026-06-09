@@ -220,19 +220,37 @@ def render_register_page(message: str = "") -> str:
     )
 
 
-def render_welcome_page(username: str) -> str:
+def render_welcome_page(username: str, message: str = "") -> str:
     safe_username = escape(username)
+    message_block = f'<div class="message">{escape(message)}</div>' if message else ""
     return render_page(
         f"""
         <section class="hero">
             <span class="eyebrow"><span class="dot"></span>Service Online</span>
             <h1>Jenkins Demo</h1>
             <p>账号已登录，当前会话正常。</p>
+            {message_block}
         </section>
-        <section class="card welcome">
-            <strong>{safe_username}，欢迎来到 jenkis 的大家庭</strong>
-            <p>你现在已经进入系统首页，可以继续扩展更多 Jenkins 相关功能。</p>
-            <a class="logout" href="/logout">退出登录</a>
+        <section class="grid">
+            <section class="card welcome">
+                <strong>{safe_username}，欢迎来到 jenkis 的大家庭</strong>
+                <p>你现在已经进入系统首页，可以继续扩展更多 Jenkins 相关功能。</p>
+                <a class="logout" href="/logout">退出登录</a>
+            </section>
+            <section class="card">
+                <h2>修改密码</h2>
+                <form action="/change-password" method="post">
+                    <label>
+                        当前密码
+                        <input type="password" name="current_password" placeholder="请输入当前密码" required />
+                    </label>
+                    <label>
+                        新密码
+                        <input type="password" name="new_password" placeholder="请输入新密码" required />
+                    </label>
+                    <button type="submit">确认修改</button>
+                </form>
+            </section>
         </section>
         """
     )
@@ -244,6 +262,14 @@ async def parse_credentials(request: Request) -> tuple[str, str]:
     username = data.get("username", [""])[0].strip()
     password = data.get("password", [""])[0].strip()
     return username, password
+
+
+async def parse_password_change(request: Request) -> tuple[str, str]:
+    body = (await request.body()).decode("utf-8")
+    data = parse_qs(body)
+    current_password = data.get("current_password", [""])[0].strip()
+    new_password = data.get("new_password", [""])[0].strip()
+    return current_password, new_password
 
 
 def get_current_user(request: Request) -> str | None:
@@ -274,7 +300,7 @@ def clear_login_attempt_state(username: str) -> None:
 async def read_root(request: Request, message: str = "") -> str:
     current_user = get_current_user(request)
     if current_user:
-        return render_welcome_page(current_user)
+        return render_welcome_page(current_user, message)
     return render_login_page(message)
 
 
@@ -282,7 +308,7 @@ async def read_root(request: Request, message: str = "") -> str:
 async def register_page(request: Request, message: str = "") -> str:
     current_user = get_current_user(request)
     if current_user:
-        return render_welcome_page(current_user)
+        return render_welcome_page(current_user, message)
     return render_register_page(message)
 
 
@@ -337,6 +363,24 @@ async def logout(request: Request) -> RedirectResponse:
     response = build_redirect(message="你已退出登录")
     response.delete_cookie(SESSION_COOKIE)
     return response
+
+
+@app.post("/change-password")
+async def change_password(request: Request) -> RedirectResponse:
+    current_user = get_current_user(request)
+    if current_user is None:
+        return build_redirect(message="请先登录后再修改密码")
+
+    current_password, new_password = await parse_password_change(request)
+
+    if not current_password or not new_password:
+        return build_redirect(message="当前密码和新密码不能为空")
+    if users.get(current_user) != current_password:
+        return build_redirect(message="当前密码不正确")
+
+    users[current_user] = new_password
+    clear_login_attempt_state(current_user)
+    return build_redirect(message="密码修改成功")
 
 
 @app.get("/health")
