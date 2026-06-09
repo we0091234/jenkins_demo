@@ -151,6 +151,18 @@ def render_page(content: str) -> str:
                 background: #e2e8f0;
                 border-radius: 14px;
             }}
+            .secondary-link {{
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: fit-content;
+                text-decoration: none;
+                padding: 12px 16px;
+                color: #0f172a;
+                font-weight: 700;
+                background: #e0f2fe;
+                border-radius: 14px;
+            }}
         </style>
     </head>
     <body>
@@ -169,7 +181,7 @@ def render_login_page(message: str = "") -> str:
         <section class="hero">
             <span class="eyebrow"><span class="dot"></span>Service Online</span>
             <h1>Jenkins Demo</h1>
-            <p>请输入账号密码登录，进入 Jenkins Demo 首页1。</p>
+            <p>请输入账号密码登录，进入 Jenkins Demo 首页。</p>
             {message_block}
         </section>
         <section class="card">
@@ -235,22 +247,39 @@ def render_welcome_page(username: str, message: str = "") -> str:
             <section class="card welcome">
                 <strong>{safe_username}，欢迎来到 jenkis 的大家庭</strong>
                 <p>你现在已经进入系统首页，可以继续扩展更多 Jenkins 相关功能。</p>
+                <a class="secondary-link" href="/change-password">修改密码</a>
                 <a class="logout" href="/logout">退出登录</a>
             </section>
-            <section class="card">
-                <h2>修改密码</h2>
-                <form action="/change-password" method="post">
-                    <label>
-                        当前密码
-                        <input type="password" name="current_password" placeholder="请输入当前密码" required />
-                    </label>
-                    <label>
-                        新密码
-                        <input type="password" name="new_password" placeholder="请输入新密码" required />
-                    </label>
-                    <button type="submit">确认修改</button>
-                </form>
-            </section>
+        </section>
+        """
+    )
+
+
+def render_change_password_page(username: str, message: str = "") -> str:
+    safe_username = escape(username)
+    message_block = f'<div class="message">{escape(message)}</div>' if message else ""
+    return render_page(
+        f"""
+        <section class="hero">
+            <span class="eyebrow"><span class="dot"></span>Service Online</span>
+            <h1>修改密码</h1>
+            <p>{safe_username}，请先验证当前密码，再设置新密码。</p>
+            {message_block}
+        </section>
+        <section class="card">
+            <h2>修改密码</h2>
+            <form action="/change-password" method="post">
+                <label>
+                    当前密码
+                    <input type="password" name="current_password" placeholder="请输入当前密码" required />
+                </label>
+                <label>
+                    新密码
+                    <input type="password" name="new_password" placeholder="请输入新密码" required />
+                </label>
+                <button type="submit">确认修改</button>
+            </form>
+            <p><a href="/">返回首页</a></p>
         </section>
         """
     )
@@ -310,6 +339,14 @@ async def register_page(request: Request, message: str = "") -> str:
     if current_user:
         return render_welcome_page(current_user, message)
     return render_register_page(message)
+
+
+@app.get("/change-password", response_class=HTMLResponse)
+async def change_password_page(request: Request, message: str = "") -> str:
+    current_user = get_current_user(request)
+    if current_user is None:
+        return render_login_page("请先登录后再修改密码")
+    return render_change_password_page(current_user, message)
 
 
 @app.post("/register")
@@ -374,9 +411,9 @@ async def change_password(request: Request) -> RedirectResponse:
     current_password, new_password = await parse_password_change(request)
 
     if not current_password or not new_password:
-        return build_redirect(message="当前密码和新密码不能为空")
+        return build_redirect(path="/change-password", message="当前密码和新密码不能为空")
     if users.get(current_user) != current_password:
-        return build_redirect(message="当前密码不正确")
+        return build_redirect(path="/change-password", message="当前密码不正确")
 
     users[current_user] = new_password
     clear_login_attempt_state(current_user)
