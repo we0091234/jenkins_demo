@@ -2,47 +2,98 @@ import asyncio
 
 import allure
 from httpx import ASGITransport, AsyncClient, Response
-from main import app
+
+from main import app, sessions, users
 
 
-async def get(path: str) -> Response:
+async def get(path: str, follow_redirects: bool = True) -> Response:
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        follow_redirects=follow_redirects,
+    ) as client:
         return await client.get(path)
 
 
+async def post(path: str, data: dict[str, str], follow_redirects: bool = True) -> Response:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        follow_redirects=follow_redirects,
+    ) as client:
+        return await client.post(path, data=data)
+
+
+def setup_function() -> None:
+    users.clear()
+    sessions.clear()
+
+
 @allure.feature("首页")
-@allure.story("服务状态展示")
-@allure.title("首页展示服务在线状态")
-def test_home_page_displays_service_status() -> None:
+@allure.story("访客态展示")
+@allure.title("未登录时首页显示登录入口和注册链接")
+def test_home_page_displays_login_page_for_guest() -> None:
     response = asyncio.run(get("/"))
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     assert "Jenkins Demo" in response.text
-    assert "Service Online" in response.text
+    assert "<h2>登录</h2>" in response.text
+    assert "立即登录" in response.text
+    assert "没有账号？" in response.text
+    assert 'href="/register"' in response.text
 
 
-@allure.feature("首页")
-@allure.story("页面结构")
-@allure.title("首页包含基础 HTML 结构")
-def test_home_page_has_expected_html_structure() -> None:
-    response = asyncio.run(get("/"))
-
-    assert "<!DOCTYPE html>" in response.text
-    assert '<html lang="zh-CN">' in response.text
-    assert '<meta name="viewport"' in response.text
-    assert "<main>" in response.text
-
-
-@allure.feature("首页")
-@allure.story("页面文案")
-@allure.title("首页展示中文介绍文案")
-def test_home_page_displays_chinese_intro_text() -> None:
-    response = asyncio.run(get("/"))
+@allure.feature("注册")
+@allure.story("注册页展示")
+@allure.title("注册页显示注册表单和登录链接")
+def test_register_page_displays_register_form() -> None:
+    response = asyncio.run(get("/register"))
 
     assert response.status_code == 200
-    assert "FastAPI 你好 jenkins" in response.text
+    assert "<h2>注册</h2>" in response.text
+    assert "立即注册" in response.text
+    assert "已有账号？" in response.text
+    assert 'href="/"' in response.text
+
+
+@allure.feature("注册")
+@allure.story("新用户创建")
+@allure.title("注册成功后返回登录提示")
+def test_register_creates_user_and_shows_success_message() -> None:
+    response = asyncio.run(post("/register", {"username": "alice", "password": "123456"}))
+
+    assert response.status_code == 200
+    assert users["alice"] == "123456"
+    assert "注册成功，请登录" in response.text
+    assert "<h2>登录</h2>" in response.text
+
+
+@allure.feature("登录")
+@allure.story("成功登录")
+@allure.title("登录成功后显示欢迎文案")
+def test_login_displays_welcome_message_after_success() -> None:
+    users["alice"] = "123456"
+
+    response = asyncio.run(post("/login", {"username": "alice", "password": "123456"}))
+
+    assert response.status_code == 200
+    assert "欢迎来到 jenkis 的大家庭" in response.text
+    assert "alice" in response.text
+
+
+@allure.feature("登录")
+@allure.story("失败处理")
+@allure.title("错误密码时返回失败提示")
+def test_login_shows_error_for_invalid_credentials() -> None:
+    users["alice"] = "123456"
+
+    response = asyncio.run(post("/login", {"username": "alice", "password": "wrong"}))
+
+    assert response.status_code == 200
+    assert "用户名或密码错误" in response.text
 
 
 @allure.feature("健康检查")

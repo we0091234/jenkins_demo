@@ -34,3 +34,5 @@ def test_running_service_home_page() -> None:
     assert response.headers["content-type"].startswith("text/html")
     assert "Jenkins Demo" in response.text
     assert "Service Online" in response.text
+    assert "立即注册" in response.text
+    assert "立即登录" in response.text
