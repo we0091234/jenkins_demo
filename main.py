@@ -169,7 +169,7 @@ def render_login_page(message: str = "") -> str:
         <section class="hero">
             <span class="eyebrow"><span class="dot"></span>Service Online</span>
             <h1>Jenkins Demo</h1>
-            <p>请输入账号密码登录，进入 Jenkins Demo 首页。</p>
+            <p>请输入账号密码登录，进入 Jenkins Demo 首页1。</p>
             {message_block}
         </section>
         <section class="card">
