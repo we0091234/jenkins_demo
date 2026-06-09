@@ -57,6 +57,19 @@ async def login_and_get_change_password_page(username: str, password: str) -> Re
         return await client.get("/change-password")
 
 
+async def reset_password(username: str, new_password: str) -> Response:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        follow_redirects=True,
+    ) as client:
+        return await client.post(
+            "/forgot-password",
+            data={"username": username, "password": new_password},
+        )
+
+
 def setup_function() -> None:
     users.clear()
     sessions.clear()
@@ -74,6 +87,8 @@ def test_home_page_displays_login_page_for_guest() -> None:
     assert "Jenkins Demo" in response.text
     assert "<h2>登录</h2>" in response.text
     assert "立即登录" in response.text
+    assert "忘记密码？去找回" in response.text
+    assert 'href="/forgot-password"' in response.text
     assert "没有账号？" in response.text
     assert 'href="/register"' in response.text
 
@@ -89,6 +104,18 @@ def test_register_page_displays_register_form() -> None:
     assert "立即注册" in response.text
     assert "已有账号？" in response.text
     assert 'href="/"' in response.text
+
+
+@allure.feature("找回密码")
+@allure.story("找回页展示")
+@allure.title("找回密码页显示重置表单")
+def test_forgot_password_page_displays_reset_form() -> None:
+    response = asyncio.run(get("/forgot-password"))
+
+    assert response.status_code == 200
+    assert "<h1>忘记密码</h1>" in response.text
+    assert "确认找回" in response.text
+    assert "返回登录" in response.text
 
 
 @allure.feature("注册")
@@ -203,6 +230,31 @@ def test_change_password_page_displays_form_after_login() -> None:
     assert "<h1>修改密码</h1>" in response.text
     assert "确认修改" in response.text
     assert "返回首页" in response.text
+
+
+@allure.feature("找回密码")
+@allure.story("密码重置")
+@allure.title("忘记密码后可以重置为新密码并重新登录")
+def test_forgot_password_resets_password_and_allows_login() -> None:
+    users["alice"] = "123456"
+
+    reset_response = asyncio.run(reset_password("alice", "newpass"))
+    login_response = asyncio.run(post("/login", {"username": "alice", "password": "newpass"}))
+
+    assert reset_response.status_code == 200
+    assert "密码已重置，请使用新密码登录" in reset_response.text
+    assert users["alice"] == "newpass"
+    assert "欢迎来到 jenkis 的大家庭" in login_response.text
+
+
+@allure.feature("找回密码")
+@allure.story("密码重置")
+@allure.title("不存在的用户名不能找回密码")
+def test_forgot_password_rejects_unknown_username() -> None:
+    response = asyncio.run(reset_password("nobody", "newpass"))
+
+    assert response.status_code == 200
+    assert "该用户名不存在，请先注册" in response.text
 
 
 @allure.feature("健康检查")
