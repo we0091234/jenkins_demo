@@ -27,6 +27,25 @@ async def post(path: str, data: dict[str, str], follow_redirects: bool = True) -
         return await client.post(path, data=data)
 
 
+async def login_and_change_password(
+    username: str,
+    password: str,
+    current_password: str,
+    new_password: str,
+) -> Response:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        follow_redirects=True,
+    ) as client:
+        await client.post("/login", data={"username": username, "password": password})
+        return await client.post(
+            "/change-password",
+            data={"current_password": current_password, "new_password": new_password},
+        )
+
+
 def setup_function() -> None:
     users.clear()
     sessions.clear()
@@ -84,6 +103,8 @@ def test_login_displays_welcome_message_after_success() -> None:
     assert response.status_code == 200
     assert "欢迎来到 jenkis 的大家庭" in response.text
     assert "alice" in response.text
+    assert "修改密码" in response.text
+    assert "确认修改" in response.text
 
 
 @allure.feature("登录")
@@ -130,6 +151,32 @@ def test_login_allows_retry_after_lock_window_expires() -> None:
 
     assert "密码输入错误三次，请 10 分钟后再试" in locked_response.text
     assert "欢迎来到 jenkis 的大家庭" in unlocked_response.text
+
+
+@allure.feature("密码管理")
+@allure.story("修改密码")
+@allure.title("登录后可以使用当前密码修改成新密码")
+def test_change_password_updates_password_for_logged_in_user() -> None:
+    users["alice"] = "123456"
+
+    response = asyncio.run(login_and_change_password("alice", "123456", "123456", "newpass"))
+
+    assert response.status_code == 200
+    assert "密码修改成功" in response.text
+    assert users["alice"] == "newpass"
+
+
+@allure.feature("密码管理")
+@allure.story("修改密码")
+@allure.title("当前密码错误时不允许修改密码")
+def test_change_password_rejects_wrong_current_password() -> None:
+    users["alice"] = "123456"
+
+    response = asyncio.run(login_and_change_password("alice", "123456", "wrong", "newpass"))
+
+    assert response.status_code == 200
+    assert "当前密码不正确" in response.text
+    assert users["alice"] == "123456"
 
 
 @allure.feature("健康检查")
