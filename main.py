@@ -197,6 +197,7 @@ def render_login_page(message: str = "") -> str:
                 </label>
                 <button type="submit">立即登录</button>
             </form>
+            <p><a href="/forgot-password">忘记密码？去找回</a></p>
             <p>没有账号？<a href="/register">立即注册</a></p>
         </section>
         """
@@ -285,6 +286,35 @@ def render_change_password_page(username: str, message: str = "") -> str:
     )
 
 
+def render_forgot_password_page(message: str = "") -> str:
+    message_block = f'<div class="message">{escape(message)}</div>' if message else ""
+    return render_page(
+        f"""
+        <section class="hero">
+            <span class="eyebrow"><span class="dot"></span>Service Online</span>
+            <h1>忘记密码</h1>
+            <p>请输入用户名并设置一个新密码，系统会直接为该账号重置密码。</p>
+            {message_block}
+        </section>
+        <section class="card">
+            <h2>找回密码</h2>
+            <form action="/forgot-password" method="post">
+                <label>
+                    用户名
+                    <input type="text" name="username" placeholder="请输入用户名" required />
+                </label>
+                <label>
+                    新密码
+                    <input type="password" name="password" placeholder="请输入新密码" required />
+                </label>
+                <button type="submit">确认找回</button>
+            </form>
+            <p><a href="/">返回登录</a></p>
+        </section>
+        """
+    )
+
+
 async def parse_credentials(request: Request) -> tuple[str, str]:
     body = (await request.body()).decode("utf-8")
     data = parse_qs(body)
@@ -341,6 +371,14 @@ async def register_page(request: Request, message: str = "") -> str:
     return render_register_page(message)
 
 
+@app.get("/forgot-password", response_class=HTMLResponse)
+async def forgot_password_page(request: Request, message: str = "") -> str:
+    current_user = get_current_user(request)
+    if current_user:
+        return render_welcome_page(current_user, message)
+    return render_forgot_password_page(message)
+
+
 @app.get("/change-password", response_class=HTMLResponse)
 async def change_password_page(request: Request, message: str = "") -> str:
     current_user = get_current_user(request)
@@ -360,6 +398,20 @@ async def register(request: Request) -> RedirectResponse:
 
     users[username] = password
     return build_redirect(message="注册成功，请登录")
+
+
+@app.post("/forgot-password")
+async def forgot_password(request: Request) -> RedirectResponse:
+    username, password = await parse_credentials(request)
+
+    if not username or not password:
+        return build_redirect(path="/forgot-password", message="用户名和新密码不能为空")
+    if username not in users:
+        return build_redirect(path="/forgot-password", message="该用户名不存在，请先注册")
+
+    users[username] = password
+    clear_login_attempt_state(username)
+    return build_redirect(message="密码已重置，请使用新密码登录")
 
 
 @app.post("/login")
