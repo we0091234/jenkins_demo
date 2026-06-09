@@ -1,5 +1,6 @@
 from html import escape
 from secrets import token_urlsafe
+from time import time
 from urllib.parse import parse_qs
 
 from fastapi import FastAPI, Request
@@ -10,8 +11,15 @@ app = FastAPI(title="Jenkins Demo API")
 
 users: dict[str, str] = {}
 sessions: dict[str, str] = {}
+failed_login_attempts: dict[str, dict[str, float]] = {}
 
 SESSION_COOKIE = "jenkins_demo_session"
+MAX_LOGIN_ATTEMPTS = 3
+LOGIN_LOCK_SECONDS = 10 * 60
+
+
+def current_time() -> float:
+    return time()
 
 
 def render_page(content: str) -> str:
@@ -250,6 +258,18 @@ def build_redirect(path: str = "/", message: str | None = None) -> RedirectRespo
     return RedirectResponse(url=target, status_code=303)
 
 
+def get_login_attempt_state(username: str) -> dict[str, float]:
+    state = failed_login_attempts.get(username)
+    if state is None:
+        state = {"count": 0, "locked_until": 0.0}
+        failed_login_attempts[username] = state
+    return state
+
+
+def clear_login_attempt_state(username: str) -> None:
+    failed_login_attempts.pop(username, None)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request, message: str = "") -> str:
     current_user = get_current_user(request)
@@ -282,10 +302,25 @@ async def register(request: Request) -> RedirectResponse:
 @app.post("/login")
 async def login(request: Request) -> RedirectResponse:
     username, password = await parse_credentials(request)
+    state = get_login_attempt_state(username)
+    now = current_time()
+
+    if state["locked_until"] > now:
+        return build_redirect(message="密码输入错误三次，请 10 分钟后再试")
+
+    if state["locked_until"] and state["locked_until"] <= now:
+        clear_login_attempt_state(username)
+        state = get_login_attempt_state(username)
 
     if users.get(username) != password:
+        state["count"] += 1
+        if state["count"] >= MAX_LOGIN_ATTEMPTS:
+            state["count"] = 0
+            state["locked_until"] = now + LOGIN_LOCK_SECONDS
+            return build_redirect(message="密码输入错误三次，请 10 分钟后再试")
         return build_redirect(message="用户名或密码错误")
 
+    clear_login_attempt_state(username)
     session_id = token_urlsafe(24)
     sessions[session_id] = username
     response = build_redirect()

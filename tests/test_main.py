@@ -1,9 +1,10 @@
 import asyncio
+from unittest.mock import patch
 
 import allure
 from httpx import ASGITransport, AsyncClient, Response
 
-from main import app, sessions, users
+from main import LOGIN_LOCK_SECONDS, app, failed_login_attempts, sessions, users
 
 
 async def get(path: str, follow_redirects: bool = True) -> Response:
@@ -29,6 +30,7 @@ async def post(path: str, data: dict[str, str], follow_redirects: bool = True) -
 def setup_function() -> None:
     users.clear()
     sessions.clear()
+    failed_login_attempts.clear()
 
 
 @allure.feature("首页")
@@ -94,6 +96,40 @@ def test_login_shows_error_for_invalid_credentials() -> None:
 
     assert response.status_code == 200
     assert "用户名或密码错误" in response.text
+
+
+@allure.feature("登录")
+@allure.story("失败限制")
+@allure.title("同一用户名输错三次后被锁定十分钟")
+def test_login_locks_user_after_three_failed_attempts() -> None:
+    users["alice"] = "123456"
+
+    with patch("main.current_time", return_value=1000.0):
+        first_response = asyncio.run(post("/login", {"username": "alice", "password": "wrong-1"}))
+        second_response = asyncio.run(post("/login", {"username": "alice", "password": "wrong-2"}))
+        third_response = asyncio.run(post("/login", {"username": "alice", "password": "wrong-3"}))
+
+    assert "用户名或密码错误" in first_response.text
+    assert "用户名或密码错误" in second_response.text
+    assert "密码输入错误三次，请 10 分钟后再试" in third_response.text
+    assert failed_login_attempts["alice"]["locked_until"] == 1000.0 + LOGIN_LOCK_SECONDS
+
+
+@allure.feature("登录")
+@allure.story("失败限制")
+@allure.title("锁定十分钟后可以重新登录")
+def test_login_allows_retry_after_lock_window_expires() -> None:
+    users["alice"] = "123456"
+    failed_login_attempts["alice"] = {"count": 0, "locked_until": 1000.0 + LOGIN_LOCK_SECONDS}
+
+    with patch("main.current_time", return_value=1000.0 + LOGIN_LOCK_SECONDS - 1):
+        locked_response = asyncio.run(post("/login", {"username": "alice", "password": "123456"}))
+
+    with patch("main.current_time", return_value=1000.0 + LOGIN_LOCK_SECONDS + 1):
+        unlocked_response = asyncio.run(post("/login", {"username": "alice", "password": "123456"}))
+
+    assert "密码输入错误三次，请 10 分钟后再试" in locked_response.text
+    assert "欢迎来到 jenkis 的大家庭" in unlocked_response.text
 
 
 @allure.feature("健康检查")
