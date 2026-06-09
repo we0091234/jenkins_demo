@@ -46,6 +46,17 @@ async def login_and_change_password(
         )
 
 
+async def login_and_get_change_password_page(username: str, password: str) -> Response:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        follow_redirects=True,
+    ) as client:
+        await client.post("/login", data={"username": username, "password": password})
+        return await client.get("/change-password")
+
+
 def setup_function() -> None:
     users.clear()
     sessions.clear()
@@ -104,7 +115,8 @@ def test_login_displays_welcome_message_after_success() -> None:
     assert "欢迎来到 jenkis 的大家庭" in response.text
     assert "alice" in response.text
     assert "修改密码" in response.text
-    assert "确认修改" in response.text
+    assert 'href="/change-password"' in response.text
+    assert "确认修改" not in response.text
 
 
 @allure.feature("登录")
@@ -177,6 +189,20 @@ def test_change_password_rejects_wrong_current_password() -> None:
     assert response.status_code == 200
     assert "当前密码不正确" in response.text
     assert users["alice"] == "123456"
+
+
+@allure.feature("密码管理")
+@allure.story("修改密码")
+@allure.title("修改密码入口跳转到独立页面")
+def test_change_password_page_displays_form_after_login() -> None:
+    users["alice"] = "123456"
+
+    response = asyncio.run(login_and_get_change_password_page("alice", "123456"))
+
+    assert response.status_code == 200
+    assert "<h1>修改密码</h1>" in response.text
+    assert "确认修改" in response.text
+    assert "返回首页" in response.text
 
 
 @allure.feature("健康检查")
